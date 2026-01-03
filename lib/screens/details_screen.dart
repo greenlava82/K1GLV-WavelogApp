@@ -6,6 +6,7 @@ import '../config/theme.dart';
 import '../models/rst_report.dart';
 import '../widgets/radio_dial.dart';
 import '../services/callsign_lookup.dart';
+import '../services/wavelog_service.dart';
 import '../services/settings_service.dart';
 
 class QsoDetailsScreen extends StatefulWidget {
@@ -343,19 +344,53 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
   }
 
   // --- SUBMIT LOG ---
-  void _submitLog() {
+  Future<void> _submitLog() async {
     bool isCW = _selectedMode == 'CW';
     
     // Clean up floating point artifacts
     double cleanFreq = double.parse(_currentFreq.toStringAsFixed(3));
 
-    print("LOGGING: ${widget.callsign} | ${_formatDateTime(_logTime, isUtc: true)} UTC | $_selectedBand | ${cleanFreq}MHz | $_selectedMode | Sent:${_sentRst.formatted(isCW)} Rcvd:${_rcvdRst.formatted(isCW)}");
-    
-    AppSettings.saveRadioState(_selectedBand, _currentFreq, _selectedMode);
-    
+    // 1. Save state for next time (Persist UI)
+    await AppSettings.saveRadioState(_selectedBand, _currentFreq, _selectedMode);
+
+    // 2. Prepare Data
+    // We send the UTC version of the log time
+    DateTime utcTime = _logTime.toUtc();
+
+    // Show a quick loading message
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Contact Logged!'), backgroundColor: Colors.green),
+      const SnackBar(content: Text('Logging to Wavelog...'), duration: Duration(milliseconds: 500)),
     );
+
+    // 3. Send to Wavelog
+    bool success = await WavelogService.postQso(
+      callsign: widget.callsign,
+      band: _selectedBand,
+      mode: _selectedMode,
+      freq: cleanFreq,
+      timeOn: utcTime,
+      rstSent: _sentRst,
+      rstRcvd: _rcvdRst,
+      grid: _opGrid, // Passed from the lookup
+      name: _opName, // Passed from the lookup
+    );
+
+    if (!mounted) return;
+
+    // 4. Feedback & Navigation
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Log Saved Successfully!'), backgroundColor: Colors.green),
+      );
+    } else {
+      // If upload fails, we show an orange warning but still close the screen
+      // In a future version, we could save this to a local DB to retry later.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Wavelog Upload Failed (Check Settings)'), backgroundColor: Colors.orange),
+      );
+    }
+
+    print("LOGGING: ${widget.callsign} | ${_formatDateTime(_logTime, isUtc: true)} UTC | $_selectedBand | ${cleanFreq}MHz | $_selectedMode");
 
     Navigator.pop(context, true); 
   }
