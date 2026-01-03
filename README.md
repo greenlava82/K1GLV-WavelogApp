@@ -1,4 +1,4 @@
-# k1glv_hamlogger
+# k1glv_WavelogLogger
 
 A new Flutter project.
 
