@@ -52,7 +52,7 @@ Before you start logging, you must configure the app. Tap the **Settings (Gear I
 
 1.  **My Station:** Enter your own callsign and Grid Square.
 2.  **Active Modes:** Select the modes you use (SSB, CW, FT8, etc.). Only selected modes will appear in the picker to keep the list clean.
-3.  **Wavelog Integration:** Enter your Wavelog/Cloudlog API URL, API Key, and **Station ID** (found in your Station Profiles).
+3.  **Wavelog Integration:** Enter your Wavelog/Cloudlog API URL, API Key, and choose a **Station ID** from the Dropdown.
 4.  **Lookup Credentials:**
     * Enter your **QRZ** (or HamQTH) Username and Password.
     * *Note: US lookups via Callook do not require a login.*
@@ -82,7 +82,7 @@ Before you start logging, you must configure the app. Tap the **Settings (Gear I
 ## 🚀 Roadmap / Todo
 
 ### Next Session
-* [ ] **Settings:** Implement "Fetch Station ID" button to populate a dropdown menu from Wavelog API.
+* [x] **Settings:** Implement "Fetch Station ID" button to populate a dropdown menu from Wavelog API.
 * [ ] **Details UI:** Add input fields for **POTA Ref**, **SOTA Ref**, and **Comments**.
 * [ ] **ADIF Export:** Update WavelogService to include the new POTA/SOTA/Comment tags in the upload.
 * [ ] **QSO History:** Query Wavelog for previous contacts with the current callsign and display a "History" indicator/list.
