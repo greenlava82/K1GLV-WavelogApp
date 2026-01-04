@@ -6,7 +6,7 @@ import '../config/theme.dart';
 import '../models/rst_report.dart';
 import '../widgets/radio_dial.dart';
 import '../services/callsign_lookup.dart';
-import '../services/wavelog_service.dart';
+import '../services/wavelog_service.dart'; // Contains LookupResult & checkDupe
 import '../services/settings_service.dart';
 
 class QsoDetailsScreen extends StatefulWidget {
@@ -41,6 +41,10 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
   String _opCountry = "";
   String _opGrid = "Loading...";
 
+  // --- HISTORY STATE ---
+  bool _isLoadingHistory = true;
+  LookupResult _historyStatus = LookupResult(); 
+
   // --- RST STATE ---
   final RstReport _sentRst = RstReport();
   final RstReport _rcvdRst = RstReport();
@@ -50,6 +54,9 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
     super.initState();
     _performLookup(); 
     _loadPreferences(); 
+    
+    // Defer history check slightly to ensure preferences might be loaded
+    Future.delayed(Duration.zero, () => _checkHistory()); 
     
     // Start the clock - Ticks every second
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -65,6 +72,27 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+
+  // --- LOGIC: CHECK HISTORY (Dupe Check) ---
+  Future<void> _checkHistory() async {
+    if (!mounted) return;
+
+    setState(() => _isLoadingHistory = true);
+
+    // Call the private_lookup endpoint
+    var result = await WavelogService.checkDupe(
+      widget.callsign, 
+      _selectedBand, 
+      _selectedMode
+    );
+
+    if (mounted) {
+      setState(() {
+        _historyStatus = result;
+        _isLoadingHistory = false;
+      });
+    }
   }
 
   // --- LOGIC: LOAD SETTINGS ---
@@ -94,6 +122,9 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
           _selectedMode = _activeModes.first;
         }
       });
+      
+      // Re-run history check now that we have the "last used" band/mode
+      _checkHistory();
     }
   }
 
@@ -129,6 +160,9 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
       _selectedBand = newBand;
       _currentFreq = bandPlan[newBand]![2]; 
     });
+    
+    // Trigger history check because Band changed
+    _checkHistory();
   }
 
   void _stepFreq(double sign) {
@@ -137,6 +171,10 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
     double stepSize = 0.001; // 1 kHz
 
     double newFreq = _currentFreq + (sign * stepSize);
+
+    // Prevent floating point drift
+    newFreq = double.parse(newFreq.toStringAsFixed(3));
+
     if (newFreq < min) newFreq = min;
     if (newFreq > max) newFreq = max;
 
@@ -154,9 +192,8 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
 
   // --- UI DIALOGS ---
 
-  // 1. Time Picker (Date + Time)
+  // 1. Time Picker
   Future<void> _pickDateTime() async {
-    // 1. Pick Date
     final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: _logTime,
@@ -165,7 +202,6 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
     );
     if (pickedDate == null) return;
 
-    // 2. Pick Time
     if (!mounted) return;
     final TimeOfDay? pickedTime = await showTimePicker(
       context: context,
@@ -173,13 +209,12 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
     );
     if (pickedTime == null) return;
 
-    // 3. Combine
     setState(() {
       _logTime = DateTime(
         pickedDate.year, pickedDate.month, pickedDate.day,
-        pickedTime.hour, pickedTime.minute, 0 // Seconds reset to 0 for manual
+        pickedTime.hour, pickedTime.minute, 0 
       );
-      _isManualTime = true; // Stop the clock
+      _isManualTime = true; 
     });
   }
 
@@ -190,7 +225,7 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
     });
   }
 
-  // 2. Direct Frequency Entry
+  // 2. Frequency Input
   void _showFrequencyInput() {
     String buffer = ""; 
     
@@ -229,6 +264,7 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
                               _bandSliderValue = _bandList.indexOf(targetBand).toDouble();
                               _currentFreq = newFreq!;
                             });
+                            _checkHistory(); // Band changed implicitly
                             Navigator.pop(context);
                           } else {
                              ScaffoldMessenger.of(context).showSnackBar(
@@ -283,7 +319,7 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
     );
   }
 
-  // 3. Mode Selector
+  // 3. Mode Picker
   void _showModePicker() {
     showDialog(
       context: context,
@@ -296,6 +332,7 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
               onPressed: () {
                 setState(() => _selectedMode = mode);
                 Navigator.pop(context);
+                _checkHistory(); // Mode changed
               },
               child: Text(mode, style: const TextStyle(fontSize: 18)),
             );
@@ -343,6 +380,58 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
     return "${t.year}-${twoDigits(t.month)}-${twoDigits(t.day)} ${twoDigits(t.hour)}:${twoDigits(t.minute)}:${twoDigits(t.second)}";
   }
 
+  // --- HELPER: BUILD HISTORY BADGE ---
+  Widget _buildHistoryBadge() {
+    // 1. Loading State
+    if (_isLoadingHistory) {
+      return const SizedBox(
+        width: 16, height: 16, 
+        child: CircularProgressIndicator(strokeWidth: 2)
+      );
+    }
+
+    // Common styling matches License Badge: vertical 4, font 12
+    const EdgeInsets badgePadding = EdgeInsets.symmetric(horizontal: 8, vertical: 4);
+    const double fontSize = 12.0;
+
+    // 2. CHECK IF WORKED AT ALL
+    // If we have worked them (on any band/mode), we show WORKED.
+    // If not, we show NEW.
+    
+    if (_historyStatus.isWorked) {
+      // --- WORKED BADGE ---
+      return Container(
+        padding: badgePadding,
+        decoration: BoxDecoration(
+          color: Colors.blue[100],
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.blue)
+        ),
+        child: Text(
+          "WORKED", 
+          style: TextStyle(
+            color: Colors.blue[900], 
+            fontSize: fontSize, 
+            fontWeight: FontWeight.bold
+          )
+        ),
+      );
+    } else {
+      // --- NEW CONTACT BADGE ---
+      return Container(
+        padding: badgePadding,
+        decoration: BoxDecoration(
+          color: Colors.green,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Text(
+          "NEW", 
+          style: TextStyle(color: Colors.white, fontSize: fontSize, fontWeight: FontWeight.bold)
+        ),
+      );
+    }
+  }
+
   // --- SUBMIT LOG ---
   Future<void> _submitLog() async {
     bool isCW = _selectedMode == 'CW';
@@ -350,14 +439,12 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
     // Clean up floating point artifacts
     double cleanFreq = double.parse(_currentFreq.toStringAsFixed(3));
 
-    // 1. Save state for next time (Persist UI)
+    // 1. Save state for next time
     await AppSettings.saveRadioState(_selectedBand, _currentFreq, _selectedMode);
 
-    // 2. Prepare Data
-    // We send the UTC version of the log time
+    // 2. Prepare Data (UTC)
     DateTime utcTime = _logTime.toUtc();
 
-    // Show a quick loading message
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Logging to Wavelog...'), duration: Duration(milliseconds: 500)),
     );
@@ -371,28 +458,22 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
       timeOn: utcTime,
       rstSent: _sentRst,
       rstRcvd: _rcvdRst,
-      grid: _opGrid, // Passed from the lookup
-      name: _opName, // Passed from the lookup
+      grid: _opGrid,
+      name: _opName,
     );
 
     if (!mounted) return;
 
-    // 4. Feedback & Navigation
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Log Saved Successfully!'), backgroundColor: Colors.green),
       );
+      Navigator.pop(context, true); 
     } else {
-      // If upload fails, we show an orange warning but still close the screen
-      // In a future version, we could save this to a local DB to retry later.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Wavelog Upload Failed (Check Settings)'), backgroundColor: Colors.orange),
       );
     }
-
-    print("LOGGING: ${widget.callsign} | ${_formatDateTime(_logTime, isUtc: true)} UTC | $_selectedBand | ${cleanFreq}MHz | $_selectedMode");
-
-    Navigator.pop(context, true); 
   }
 
   @override
@@ -427,28 +508,31 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // Callsign
                         Text(
                           widget.callsign, 
                           style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: AppTheme.primaryColor)
                         ),
                         
-                        // UPDATED: Subtle "Cancel" style close button
+                        // Cancel Button
                         Padding(
                           padding: const EdgeInsets.only(left: 8.0),
                           child: IconButton(
                             icon: Icon(Icons.cancel, color: Colors.grey[400], size: 28),
                             tooltip: "Clear and Return",
                             padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(), // Removes extra padding around the icon
-                            onPressed: () {
-                              Navigator.pop(context, true);
-                            },
+                            constraints: const BoxConstraints(),
+                            onPressed: () => Navigator.pop(context, true),
                           ),
                         ),
 
                         const Spacer(), 
+
+                        // History Badge
+                        _buildHistoryBadge(),
+                        
+                        const SizedBox(width: 8), 
 
                         // License Class Badge
                         Container(
@@ -467,7 +551,10 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
                     ),
                     
                     const SizedBox(height: 4),
+                    
+                    // Name Row
                     Text(_opName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+
                     const Divider(height: 20),
                     
                     Text(
@@ -541,7 +628,6 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
                 child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(_selectedMode, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), const Icon(Icons.arrow_drop_down_circle, color: AppTheme.primaryColor)]),
               ),
             ),
-            
 
             const Divider(height: 40),
 
@@ -554,7 +640,7 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
                   child: InkWell(
                     onTap: () => _showRstEditor("Sent", _sentRst),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12), // REDUCED PADDING
+                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
                       decoration: AppTheme.activeCard.copyWith(color: Colors.blue[50]),
                       child: Column(children: [const Text("SENT", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)), const SizedBox(height: 5), Text(_sentRst.formatted(isCW), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: AppTheme.primaryColor)), const SizedBox(height: 5), const Text("Tap to Edit", style: TextStyle(fontSize: 10, color: Colors.blueGrey))]),
                     ),
@@ -565,7 +651,7 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
                   child: InkWell(
                     onTap: () => _showRstEditor("Received", _rcvdRst),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12), // REDUCED PADDING
+                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
                       decoration: AppTheme.activeCard.copyWith(color: Colors.green[50], border: Border.all(color: Colors.green, width: 2)),
                       child: Column(children: [const Text("RCVD", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)), const SizedBox(height: 5), Text(_rcvdRst.formatted(isCW), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.green)), const SizedBox(height: 5), const Text("Tap to Edit", style: TextStyle(fontSize: 10, color: Colors.blueGrey))]),
                     ),
@@ -619,7 +705,6 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 20),
           ],
         ),
