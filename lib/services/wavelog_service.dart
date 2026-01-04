@@ -7,11 +7,67 @@ import '../models/rst_report.dart';
 
 class WavelogService {
   
+  // --- FETCH STATIONS (Robust: Trims Key + GET Fallback) ---
+  static Future<List<Map<String, String>>> fetchStations(String baseUrl, String apiKey) async {
+    // 1. Sanitize Inputs
+    if (baseUrl.isEmpty || apiKey.isEmpty) {
+      print("Wavelog: Missing URL or Key");
+      return [];
+    }
+    
+    // Remove trailing slash and spaces
+    if (baseUrl.endsWith('/')) baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+    apiKey = apiKey.trim(); 
+
+    // 2. Attempt 1: Standard POST request
+    final Uri postUri = Uri.parse("$baseUrl/station_info");
+    print("Wavelog: Fetching stations (POST) from $postUri");
+
+    try {
+      var response = await http.post(
+        postUri,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"key": apiKey}),
+      );
+
+      // 3. Attempt 2: GET Fallback (if POST fails)
+      if (response.statusCode == 401 || response.statusCode == 404 || response.statusCode == 405) {
+        print("POST failed (${response.statusCode}). Retrying with GET method...");
+        
+        // Wavelog often accepts: /index.php/api/station_info/API_KEY
+        final Uri getUri = Uri.parse("$baseUrl/station_info/$apiKey");
+        response = await http.get(getUri);
+      }
+
+      print("Wavelog Response Code: ${response.statusCode}");
+      // print("Wavelog Raw Body: ${response.body}"); // Uncomment to debug raw JSON
+
+      if (response.statusCode == 200) {
+        final dynamic decoded = jsonDecode(response.body);
+
+        if (decoded is List) {
+          return decoded.map<Map<String, String>>((json) {
+            return {
+              'id': json['station_id'].toString(),
+              'name': json['station_profile_name'].toString(),
+            };
+          }).toList();
+        } else if (decoded is Map) {
+          print("Wavelog returned a Map error: $decoded");
+        }
+      }
+    } catch (e) {
+      print("Error fetching stations: $e");
+    }
+    return [];
+  }
+
+  // --- POST QSO (Existing Logic + Trim) ---
   static Future<bool> postQso({
     required String callsign,
     required String band,
     required String mode,
-    required double freq, // in MHz
+    required double freq,
     required DateTime timeOn,
     required RstReport rstSent,
     required RstReport rstRcvd,
@@ -19,7 +75,6 @@ class WavelogService {
     String? name, 
   }) async {
     
-    // 1. Load Settings
     String baseUrl = await AppSettings.getString(AppSettings.keyWavelogUrl);
     String apiKey = await AppSettings.getString(AppSettings.keyWavelogKey);
     String stationIdStr = await AppSettings.getString(AppSettings.keyWavelogStationId);
@@ -32,32 +87,24 @@ class WavelogService {
     }
 
     if (baseUrl.endsWith('/')) baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+    apiKey = apiKey.trim(); // <--- CRITICAL FIX
+
     final Uri apiUri = Uri.parse("$baseUrl/qso");
     
-    // Parse Station ID
     int stationProfileId = -1;
     if (stationIdStr.isNotEmpty) {
       int? parsedId = int.tryParse(stationIdStr);
       if (parsedId != null) stationProfileId = parsedId;
     }
 
-    // 2. BUILD RAW ADIF STRING
-    // This is the "Gold Standard" format. It looks like: <TAG:LEN>DATA
-    
+    // BUILD RAW ADIF STRING
     bool isCW = mode == 'CW';
-    
-    // Date format: YYYYMMDD
     String qsoDate = "${timeOn.year}${timeOn.month.toString().padLeft(2,'0')}${timeOn.day.toString().padLeft(2,'0')}";
-    // Time format: HHMMSS (UTC)
     String timeOnStr = "${timeOn.hour.toString().padLeft(2,'0')}${timeOn.minute.toString().padLeft(2,'0')}${timeOn.second.toString().padLeft(2,'0')}";
 
     StringBuffer adif = StringBuffer();
-    
-    // Helper to format tags
     void add(String tag, String value) {
-      if (value.isNotEmpty) {
-        adif.write("<$tag:${value.length}>$value");
-      }
+      if (value.isNotEmpty) adif.write("<$tag:${value.length}>$value");
     }
 
     add("CALL", callsign.toUpperCase());
@@ -74,12 +121,8 @@ class WavelogService {
     if (grid != null && grid != "---") add("GRIDSQUARE", grid);
     if (name != null && name != "Not Found") add("NAME", name);
     
-    adif.write("<EOR>"); // End of Record
+    adif.write("<EOR>"); 
 
-    print("Generated ADIF: ${adif.toString()}");
-
-    // 3. Construct Payload
-    // We send 'type':'adif' and put the raw string in 'string'
     Map<String, dynamic> payload = {
       "key": apiKey,
       "station_profile_id": stationProfileId,
@@ -87,10 +130,8 @@ class WavelogService {
       "string": adif.toString() 
     };
 
-    // 4. Send Request
     try {
       print("Wavelog: Sending QSO -> $callsign (Station ID: $stationProfileId)...");
-      
       final response = await http.post(
         apiUri,
         headers: {"Content-Type": "application/json"},
@@ -98,9 +139,8 @@ class WavelogService {
       );
 
       print("Wavelog Status: ${response.statusCode}");
-      print("Wavelog Body:   ${response.body}");
+      // print("Wavelog Body:   ${response.body}");
 
-      // Cloudlog often returns a body like: {"message":"QSO Added","count":1}
       if (response.statusCode == 200 || response.statusCode == 201) {
         return true;
       } else {
