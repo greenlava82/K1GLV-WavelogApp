@@ -3,16 +3,16 @@ import 'config/theme.dart';
 import 'screens/input_screen.dart';
 
 void main() {
-  runApp(const HamLoggerApp());
+  runApp(const WavelogPortable());
 }
 
-class HamLoggerApp extends StatelessWidget {
-  const HamLoggerApp({super.key});
+class WavelogPortable extends StatelessWidget {
+  const WavelogPortable({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'K1GLV Wavelog Mobile',
+      title: 'Wavelog Portable',
       theme: ThemeData(
         useMaterial3: true,
         primaryColor: AppTheme.primaryColor,
