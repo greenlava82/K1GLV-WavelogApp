@@ -7,6 +7,9 @@ import '../widgets/radio_dial.dart';
 import '../services/callsign_lookup.dart';
 import '../services/wavelog_service.dart';
 import '../services/settings_service.dart';
+import 'package:latlong2/latlong.dart';
+import '../utils/maidenhead.dart';
+import '../widgets/location_map_dialog.dart';
 
 class QsoDetailsScreen extends StatefulWidget {
   final String callsign;
@@ -68,6 +71,26 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+
+  void _showMap() {
+    // 1. Try to convert grid to LatLng
+    LatLng? target = MaidenheadLocator.toLatLng(_opGrid);
+
+    if (target != null) {
+      showDialog(
+        context: context,
+        builder: (context) => LocationMapDialog(
+          center: target, 
+          callsign: widget.callsign, 
+          grid: _opGrid
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Invalid Grid for Map")),
+      );
+    }
   }
 
   Future<void> _checkHistory() async {
@@ -525,7 +548,23 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
                       overflow: TextOverflow.ellipsis
                     ),
                     
-                    Text("Grid: $_opGrid", style: const TextStyle(color: Colors.black87)),
+                    Row(
+                      children: [
+                        Text("Grid: $_opGrid", style: const TextStyle(color: Colors.black87)),
+                        const SizedBox(width: 8),
+                        // Only show button if we have a valid-looking grid (4 chars minimum)
+                        if (_opGrid.length >= 4 && _opGrid != "Loading...")
+                          SizedBox(
+                            height: 24, 
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.map_outlined, size: 20, color: Colors.blue),
+                              tooltip: "View on Map",
+                              onPressed: _showMap,
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
