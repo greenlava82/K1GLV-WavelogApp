@@ -26,7 +26,7 @@ class QsoDetailsScreen extends StatefulWidget {
 class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
   // Band & Freq
   final List<String> _bandList = bandPlan.keys.toList();
-  double _bandSliderValue = 5.0; // Default: 20m
+  double _bandSliderValue = 5.0; 
   String _selectedBand = '20m';
   double _currentFreq = 14.074;
   
@@ -34,7 +34,7 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
   List<String> _activeModes = [];
   String _selectedMode = 'SSB';
 
-  // Activations (POTA/SOTA)
+  // Activity
   List<ActivityRef> _activeActivations = [];
 
   // Time
@@ -49,6 +49,9 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
   String _opState = "";
   String _opCountry = "";
   String _opGrid = "Loading...";
+  // NEW: Coordinates
+  double? _opLat;
+  double? _opLon;
 
   // History & Reports
   bool _isLoadingHistory = true;
@@ -62,7 +65,6 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
     _performLookup(); 
     _loadPreferences(); 
     
-    // Defer history check slightly
     Future.delayed(Duration.zero, () => _checkHistory()); 
     
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -143,6 +145,9 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
         _opState = profile.state;
         _opCountry = profile.country;
         _opGrid = profile.grid;
+        // Store coordinates
+        _opLat = profile.lat;
+        _opLon = profile.lon;
       });
     }
   }
@@ -180,8 +185,6 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
     }
     return null;
   }
-
-  // --- UI DIALOGS ---
 
   Future<void> _pickDateTime() async {
     final DateTime? pickedDate = await showDatePicker(
@@ -360,27 +363,35 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
     );
   }
 
-  // --- MAP LOGIC ---
+  // --- UPDATED MAP LOGIC ---
   void _showMap() {
-    LatLng? target = MaidenheadLocator.toLatLng(_opGrid);
+    LatLng? target;
+    
+    // 1. Try exact coordinates (if Lookup provided them)
+    if (_opLat != null && _opLon != null) {
+      target = LatLng(_opLat!, _opLon!);
+    } 
+    // 2. Fallback to Grid Square
+    else {
+      target = MaidenheadLocator.toLatLng(_opGrid);
+    }
     
     if (target != null) {
       showDialog(
         context: context,
         builder: (context) => LocationMapDialog(
-          center: target, 
+          center: target!, 
           callsign: widget.callsign, 
           grid: _opGrid
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Invalid Grid for Map")),
+        const SnackBar(content: Text("No location data for Map")),
       );
     }
   }
 
-  // --- ACTIVITY SELECTION LOGIC ---
   Future<void> _showActivityDialog() async {
     final result = await showDialog<List<ActivityRef>>(
       context: context,
@@ -447,7 +458,6 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
     double cleanFreq = double.parse(_currentFreq.toStringAsFixed(3));
     DateTime utcTime = _logTime.toUtc();
 
-    // 1. Save state (Async)
     await AppSettings.saveRadioState(_selectedBand, _currentFreq, _selectedMode);
 
     if (!mounted) return; 
@@ -456,11 +466,9 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
       const SnackBar(content: Text('Logging to Wavelog...'), duration: Duration(milliseconds: 500)),
     );
 
-    // 2. Prepare Activity Data (POTA/SOTA)
     List<String> potaRefs = _activeActivations.where((a) => a.type == 'POTA').map((a) => a.reference).toList();
     List<String> sotaRefs = _activeActivations.where((a) => a.type == 'SOTA').map((a) => a.reference).toList();
 
-    // 3. Network Request
     bool success = await WavelogService.postQso(
       callsign: widget.callsign,
       band: _selectedBand,
@@ -471,7 +479,6 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
       rstRcvd: _rcvdRst,
       grid: _opGrid,
       name: _opName,
-      // Pass the POTA/SOTA data to the service
       potaList: potaRefs.join(','), 
       sotaRef: sotaRefs.isNotEmpty ? sotaRefs.first : null,
     );
@@ -492,8 +499,9 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    double minFreq = bandPlan[_selectedBand]![0];
-    double maxFreq = bandPlan[_selectedBand]![1];
+    // Check if we have enough info to show the map button
+    bool canShowMap = (_opLat != null && _opLon != null) || (_opGrid.length >= 4 && _opGrid != "Loading...");
+
     bool isCW = _selectedMode == 'CW';
 
     return Scaffold(
@@ -567,29 +575,46 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
 
                     const Divider(height: 20),
                     
-                    Text(
-                      (_opState == "---" || _opState.isEmpty)
-                        ? "$_opCity, $_opCountry"
-                        : "$_opCity, $_opState, $_opCountry",
-                      style: const TextStyle(color: Colors.black87),
-                      overflow: TextOverflow.ellipsis
-                    ),
-                    
-                    // Grid & Map Button
+                    // --- NEW LAYOUT: MAP ICON LEFT OF LOCATION ---
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("Grid: $_opGrid", style: const TextStyle(color: Colors.black87)),
-                        const SizedBox(width: 8),
-                        if (_opGrid.length >= 4 && _opGrid != "Loading...")
+                        // Map Button (Left side)
+                        if (canShowMap) ...[
                           SizedBox(
-                            height: 24, 
-                            child: IconButton(
+                            height: 36, // Slightly taller container
+                            width: 36,
+                            child: IconButton.filledTonal(
                               padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.map_outlined, size: 20, color: Colors.blue),
-                              tooltip: "View on Map",
+                              iconSize: 20,
+                              icon: const Icon(Icons.map_outlined),
                               onPressed: _showMap,
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.blue[50],
+                                foregroundColor: Colors.blue[800]
+                              )
                             ),
                           ),
+                          const SizedBox(width: 12),
+                        ],
+
+                        // Location Text (Right side)
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                (_opState == "---" || _opState.isEmpty)
+                                  ? "$_opCity, $_opCountry"
+                                  : "$_opCity, $_opState, $_opCountry",
+                                style: const TextStyle(color: Colors.black87, fontSize: 15),
+                                overflow: TextOverflow.ellipsis
+                              ),
+                              const SizedBox(height: 4),
+                              Text("Grid: $_opGrid", style: const TextStyle(color: Colors.black54)),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -637,21 +662,28 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
             const SizedBox(height: 5),
             Row(
               children: [
-                IconButton.filledTonal(onPressed: () => _stepFreq(-1.0), icon: const Icon(Icons.remove), tooltip: "-1 kHz"),
-                Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8.0), child: RadioDial(value: _currentFreq, min: minFreq, max: maxFreq, divisions: ((maxFreq - minFreq) * 1000).toInt(), onChanged: (v) => setState(() => _currentFreq = v), activeColor: Colors.redAccent))),
-                IconButton.filledTonal(onPressed: () => _stepFreq(1.0), icon: const Icon(Icons.add), tooltip: "+1 kHz"),
+                IconButton.filled(
+                  style: IconButton.styleFrom(backgroundColor: Colors.green[100], foregroundColor: Colors.green[900]),
+                  onPressed: () => _stepFreq(-1.0), 
+                  icon: const Icon(Icons.remove), 
+                  tooltip: "-1 kHz"
+                ),
+                Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8.0), child: RadioDial(value: _currentFreq, min: bandPlan[_selectedBand]![0], max: bandPlan[_selectedBand]![1], divisions: ((bandPlan[_selectedBand]![1] - bandPlan[_selectedBand]![0]) * 1000).toInt(), onChanged: (v) => setState(() => _currentFreq = v), activeColor: Colors.redAccent))),
+                IconButton.filled(
+                  style: IconButton.styleFrom(backgroundColor: Colors.green[100], foregroundColor: Colors.green[900]),
+                  onPressed: () => _stepFreq(1.0), 
+                  icon: const Icon(Icons.add), 
+                  tooltip: "+1 kHz"
+                ),
               ],
             ),
 
-            const SizedBox(height: 10),
-            // --- HEADER ROW (Title + Active Refs) ---
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.end, // Aligns text to bottom of header
+              crossAxisAlignment: CrossAxisAlignment.end, 
               children: [
                 const Text("Mode / Activity", style: AppTheme.sectionHeader),
                 
-                // Active Parks/Summits Text (Right Aligned)
                 if (_activeActivations.isNotEmpty)
                   Expanded(
                     child: Text(
@@ -668,12 +700,10 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
               ],
             ),
             
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
 
-            // --- SPLIT ROW: MODE & ACTIVITY BUTTONS ---
             Row(
               children: [
-                // 1. MODE PICKER (Flex 4 = 80% width)
                 Expanded(
                   flex: 4,
                   child: GestureDetector(
@@ -699,7 +729,6 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
                 
                 const SizedBox(width: 10),
                 
-                // 2. ACTIVITY BUTTON (Flex 1 = 20% width)
                 Expanded(
                   flex: 1,
                   child: GestureDetector(
@@ -722,11 +751,9 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
                 ),
               ],
             ),
-            
-            // REMOVED: The old "Active: ..." text block that was down here.
 
             const Divider(height: 40),
-            // RST
+
             const Text("Signal Report", style: AppTheme.sectionHeader),
             const SizedBox(height: 10),
             Row(
@@ -756,19 +783,25 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
             ),
             const SizedBox(height: 20), 
             
-            // TIME CARD
             Card(
               color: _isManualTime ? Colors.amber[50] : Colors.green[50], 
               elevation: 0,
-              shape: RoundedRectangleBorder(side: BorderSide(color: Colors.grey[300]!), borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  side: BorderSide(
+                      color: _isManualTime ? Colors.amber[200]! : Colors.green[200]!
+                  ), 
+                  borderRadius: BorderRadius.circular(12)
+              ),
               child: InkWell(
                 onTap: _pickDateTime, 
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(12),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
                     children: [
-                      Icon(Icons.access_time, color: _isManualTime ? Colors.amber[900] : AppTheme.primaryColor),
+                      Icon(Icons.access_time, 
+                          color: _isManualTime ? Colors.amber[900] : AppTheme.primaryColor
+                      ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: Column(
