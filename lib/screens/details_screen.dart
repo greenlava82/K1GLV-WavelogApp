@@ -758,7 +758,7 @@ class _QsoDetailsScreenState extends State<QsoDetailsScreen> {
             
             // TIME CARD
             Card(
-              color: _isManualTime ? Colors.amber[50] : Colors.blue[50], 
+              color: _isManualTime ? Colors.amber[50] : Colors.green[50], 
               elevation: 0,
               shape: RoundedRectangleBorder(side: BorderSide(color: Colors.grey[300]!), borderRadius: BorderRadius.circular(8)),
               child: InkWell(
