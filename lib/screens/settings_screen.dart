@@ -3,6 +3,7 @@ import '../config/theme.dart';
 import '../services/settings_service.dart';
 import '../services/wavelog_service.dart';
 import '../services/database_service.dart';
+import '../widgets/app_about_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -215,6 +216,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               }
             },
           ),
+          _buildHeader("About"),
+          ListTile(
+            leading: const Icon(Icons.info_outline, color: AppTheme.primaryColor),
+            title: const Text("App Info & Version"),
+            subtitle: const Text("Developer credits and links"),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (context) => const AppAboutDialog(),
+              );
+            },
+          ),
+          
           const SizedBox(height: 80),
         ],
       ),
