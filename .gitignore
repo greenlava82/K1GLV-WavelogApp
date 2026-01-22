@@ -47,3 +47,10 @@ app.*.map.json
 
 # Code packager artifacts for AI assist
 full_code_dump.txt
+
+# Keystore files
+*.jks
+*.keystore
+
+# Key configuration
+key.properties
