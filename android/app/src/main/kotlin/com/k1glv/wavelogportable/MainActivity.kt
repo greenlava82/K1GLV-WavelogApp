@@ -1,4 +1,4 @@
-package com.example.k1glv_hamlogger
+package com.k1glv.wavelogportable
 
 import io.flutter.embedding.android.FlutterActivity
 
