@@ -19,7 +19,8 @@ class WavelogService {
     
     String baseUrl = await AppSettings.getString(AppSettings.keyWavelogUrl);
     if (baseUrl.endsWith('/')) baseUrl = baseUrl.substring(0, baseUrl.length - 1);
-    final Uri apiUri = Uri.parse("$baseUrl/qso");
+    if (baseUrl.endsWith('/index.php/api')) baseUrl = baseUrl.substring(0, baseUrl.length - 14);
+    final Uri apiUri = Uri.parse("$baseUrl/index.php/api/qso");
 
     for (var row in queue) {
       try {
@@ -50,9 +51,10 @@ class WavelogService {
     if (baseUrl.isEmpty || apiKey.isEmpty) return [];
     
     if (baseUrl.endsWith('/')) baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+    if (baseUrl.endsWith('/index.php/api')) baseUrl = baseUrl.substring(0, baseUrl.length - 14);
     apiKey = apiKey.trim(); 
 
-    final Uri postUri = Uri.parse("$baseUrl/station_info");
+    final Uri postUri = Uri.parse("$baseUrl/index.php/api/station_info");
 
     try {
       var response = await http.post(
@@ -62,7 +64,7 @@ class WavelogService {
       );
 
       if (response.statusCode == 401 || response.statusCode == 404 || response.statusCode == 405) {
-        final Uri getUri = Uri.parse("$baseUrl/station_info/$apiKey");
+        final Uri getUri = Uri.parse("$baseUrl/index.php/api/station_info/$apiKey");
         response = await http.get(getUri);
       }
 
@@ -106,9 +108,10 @@ class WavelogService {
     if (baseUrl.isEmpty || apiKey.isEmpty) return false; 
 
     if (baseUrl.endsWith('/')) baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+    if (baseUrl.endsWith('/index.php/api')) baseUrl = baseUrl.substring(0, baseUrl.length - 14);
     apiKey = apiKey.trim();
 
-    final Uri apiUri = Uri.parse("$baseUrl/qso");
+    final Uri apiUri = Uri.parse("$baseUrl/index.php/api/qso");
     
     int stationProfileId = -1;
     if (stationIdStr.isNotEmpty) {
@@ -199,8 +202,9 @@ try {
 
     if (baseUrl.isEmpty || apiKey.isEmpty) return LookupResult();
     if (baseUrl.endsWith('/')) baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+    if (baseUrl.endsWith('/index.php/api')) baseUrl = baseUrl.substring(0, baseUrl.length - 14);
 
-    final Uri apiUri = Uri.parse("$baseUrl/private_lookup");
+    final Uri apiUri = Uri.parse("$baseUrl/index.php/api/private_lookup");
 
     Map<String, dynamic> payload = {
       "key": apiKey,

@@ -36,6 +36,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String call = await AppSettings.getString(AppSettings.keyMyCallsign);
     String grid = await AppSettings.getString(AppSettings.keyMyGrid);
     String url = await AppSettings.getString(AppSettings.keyWavelogUrl);
+
+    // Migration: Remove legacy API path if present
+    if (url.endsWith('/index.php/api')) {
+      url = url.substring(0, url.length - 14);
+      await AppSettings.saveString(AppSettings.keyWavelogUrl, url);
+    }
+
     String key = await AppSettings.getString(AppSettings.keyWavelogKey);
     String stId = await AppSettings.getString(AppSettings.keyWavelogStationId);
     String hUser = await AppSettings.getString(AppSettings.keyHamQthUser);
@@ -147,7 +154,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
 
           _buildHeader("Wavelog Integration"),
-          _buildTextField("Wavelog URL", _wavelogUrlCtrl, hint: "https://log.mysite.com/index.php/api", icon: Icons.link),
+          _buildTextField("Wavelog URL", _wavelogUrlCtrl, hint: "https://log.mysite.com", icon: Icons.link),
           _buildTextField("API Key", _wavelogKeyCtrl, icon: Icons.vpn_key),
           
           Padding(

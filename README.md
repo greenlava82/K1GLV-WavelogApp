@@ -39,6 +39,6 @@ A specialized, offline-first amateur radio logging application built with Flutte
 * [ ] **UI Refinement:** Tablet/Landscape layout optimizations.
 
 ## 🔑 Setup
-1.  **Settings:** Enter your Wavelog Base URL (e.g., `https://log.mysite.com/index.php/api`) and API Key.
+1.  **Settings:** Enter your Wavelog Base URL (e.g., `https://log.mysite.com`) and API Key.
 2.  **Credentials:** Enter QRZ/HamQTH credentials for international lookups.
 3.  **Databases:** Go to Settings and tap "Download POTA/SOTA Databases" to initialize the offline search.
