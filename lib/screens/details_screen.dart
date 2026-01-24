@@ -12,7 +12,6 @@ import '../widgets/radio_dial.dart';
 import '../widgets/location_map_dialog.dart';
 import '../widgets/activity_selection_dialog.dart';
 import '../services/callsign_lookup.dart';
-import '../services/wavelog_service.dart'; // Keep for now if needed, but primarily replacing
 import '../services/session_service.dart';
 import '../services/database_service.dart';
 import '../services/settings_service.dart';
