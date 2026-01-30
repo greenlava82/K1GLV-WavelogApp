@@ -185,6 +185,32 @@ class DatabaseService {
     return null;
   }
 
+  Future<List<Map<String, dynamic>>> getSessions() async {
+    final db = await database;
+    return await db.query(
+      'sessions',
+      orderBy: 'start_time DESC',
+    );
+  }
+
+  Future<void> deleteSession(int id) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('session_qsos', where: 'session_id = ?', whereArgs: [id]);
+      await txn.delete('sessions', where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
+  Future<void> reopenSession(int id) async {
+    final db = await database;
+    await db.update(
+      'sessions',
+      {'is_active': 1, 'end_time': null},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<int> insertSessionQso(Map<String, dynamic> qso) async {
     final db = await database;
     return await db.insert('session_qsos', qso);
@@ -198,6 +224,14 @@ class DatabaseService {
       whereArgs: [sessionId],
       orderBy: 'timestamp DESC'
     );
+  }
+
+  Future<int> getSessionQsoCount(int sessionId) async {
+    final db = await database;
+    return Sqflite.firstIntValue(await db.rawQuery(
+      'SELECT COUNT(*) FROM session_qsos WHERE session_id = ?', 
+      [sessionId]
+    )) ?? 0;
   }
 
   Future<List<Map<String, dynamic>>> getUnuploadedSessionQsos() async {
