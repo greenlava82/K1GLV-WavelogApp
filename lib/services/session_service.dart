@@ -29,7 +29,7 @@ class SessionService extends ChangeNotifier {
     final sessionMap = await db.getActiveSession();
     if (sessionMap != null) {
       _currentSession = Session.fromMap(sessionMap);
-      print("RESTORED SESSION: ${_currentSession!.name}");
+      debugPrint("RESTORED SESSION: ${_currentSession!.name}");
     }
     notifyListeners();
   }
@@ -190,7 +190,7 @@ class SessionService extends ChangeNotifier {
 
     final db = DatabaseService();
     int qsoId = await db.insertSessionQso(qso.toMap());
-    print("LOGGED QSO Locally: ID $qsoId");
+    debugPrint("LOGGED QSO Locally: ID $qsoId");
 
     // 2. Upload Logic
     if (!_isOfflineMode) {
@@ -214,7 +214,7 @@ class SessionService extends ChangeNotifier {
 
       if (status == 200 || status == 201) {
         await db.markSessionQsoUploaded(qsoId);
-        print("UPLOADED QSO: ID $qsoId");
+        debugPrint("UPLOADED QSO: ID $qsoId");
       }
     }
 
@@ -312,7 +312,7 @@ class SessionService extends ChangeNotifier {
         // We should delete it to unblock the queue, unless it's Auth (401/403) or Rate Limit (429).
         // Common Wavelog 400: "Station Profile not found", "Missing fields", "Duplicate" (sometimes)
         if (status >= 400 && status < 500 && status != 401 && status != 403 && status != 429) {
-           print("FLUSH: Permanent Error ($status). Deleting QSO ID ${qso.id}");
+           debugPrint("FLUSH: Permanent Error ($status). Deleting QSO ID ${qso.id}");
            await DatabaseService().deleteSessionQso(qso.id!);
         }
       }

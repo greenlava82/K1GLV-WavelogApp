@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -296,7 +297,7 @@ class DatabaseService {
       'payload': jsonEncode(payload), // Store the whole JSON blob
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     });
-    print("OFFLINE: QSO Saved to Queue");
+    developer.log("OFFLINE: QSO Saved to Queue");
   }
 
   Future<List<Map<String, dynamic>>> getOfflineQsos() async {
@@ -417,10 +418,10 @@ class DatabaseService {
           }
           await batch.commit(noResult: true);
         });
-        print("POTA Update Complete: ${rows.length} parks.");
+        developer.log("POTA Update Complete: ${rows.length} parks.");
       }
     } catch (e) {
-      print("Error updating POTA: $e");
+      developer.log("Error updating POTA: $e");
       onStatus("Error updating POTA: $e");
     }
   }
@@ -461,10 +462,10 @@ class DatabaseService {
           }
           await batch.commit(noResult: true);
         });
-        print("SOTA Update Complete: ${rows.length} summits.");
+        developer.log("SOTA Update Complete: ${rows.length} summits.");
       }
     } catch (e) {
-      print("Error updating SOTA: $e");
+      developer.log("Error updating SOTA: $e");
       onStatus("Error updating SOTA: $e");
     }
   }
