@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'details_screen.dart';
 import 'settings_screen.dart';
+import 'sessions_list_screen.dart';
 import '../config/theme.dart';
 import '../services/settings_service.dart';
 import '../services/session_service.dart';
@@ -296,6 +297,15 @@ class _CallsignInputScreenState extends State<CallsignInputScreen> {
                     } else {
                       _stopSession();
                     }
+                  },
+                ),
+                ListTile(
+                  title: const Text("Manage Sessions"),
+                  subtitle: const Text("View history, resume, or delete"),
+                  leading: const Icon(Icons.history),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const SessionsListScreen()));
                   },
                 ),
                 ListTile(

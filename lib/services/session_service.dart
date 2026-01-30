@@ -76,6 +76,49 @@ class SessionService extends ChangeNotifier {
     }
   }
 
+  Future<List<Session>> getSessions() async {
+    final db = DatabaseService();
+    final maps = await db.getSessions();
+    return maps.map((m) => Session.fromMap(m)).toList();
+  }
+
+  Future<int> getQsoCount(int sessionId) async {
+    return await DatabaseService().getSessionQsoCount(sessionId);
+  }
+
+  Future<void> resumeSession(Session session) async {
+    if (_currentSession != null) {
+      await stopSession();
+    }
+    
+    final db = DatabaseService();
+    if (session.id != null) {
+      await db.reopenSession(session.id!);
+      
+      // Update local state
+      _currentSession = Session(
+        id: session.id,
+        name: session.name,
+        startTime: session.startTime,
+        endTime: null, // Cleared
+        isActive: true
+      );
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteSession(Session session) async {
+    if (session.id == null) return;
+    
+    final db = DatabaseService();
+    await db.deleteSession(session.id!);
+    
+    if (_currentSession?.id == session.id) {
+      _currentSession = null;
+    }
+    notifyListeners();
+  }
+
   /// Main logging function. Returns true if saved locally. 
   /// The UI should observe 'isUploaded' status if it cares.
   Future<bool> logQso({
