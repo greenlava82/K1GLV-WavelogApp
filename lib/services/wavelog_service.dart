@@ -2,12 +2,15 @@
 // ==============================
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+// ignore: depend_on_referenced_packages
+import 'package:logging/logging.dart';
 import 'settings_service.dart';
 import '../models/rst_report.dart';
 import '../models/lookup_result.dart';
 import '../services/database_service.dart';
 
 class WavelogService {
+  static final Logger _logger = Logger('WavelogService');
   
   static Future<void> flushOfflineQueue() async {
     final db = DatabaseService();
@@ -15,7 +18,7 @@ class WavelogService {
     
     if (queue.isEmpty) return;
     
-    print("FLUSH: Found ${queue.length} pending QSOs. Retrying...");
+    _logger.info("FLUSH: Found ${queue.length} pending QSOs. Retrying...");
     
     String baseUrl = await AppSettings.getString(AppSettings.keyWavelogUrl);
     if (baseUrl.endsWith('/')) baseUrl = baseUrl.substring(0, baseUrl.length - 1);
@@ -32,16 +35,16 @@ class WavelogService {
         );
 
         if (response.statusCode == 200 || response.statusCode == 201) {
-          print("FLUSH: QSO ID ${row['id']} Uploaded Successfully!");
+          _logger.info("FLUSH: QSO ID ${row['id']} Uploaded Successfully!");
           // Delete from local DB immediately upon success
           await db.deleteOfflineQso(row['id']);
         } else {
-          print("FLUSH: Failed ID ${row['id']} with ${response.statusCode}. Stopping flush.");
+          _logger.warning("FLUSH: Failed ID ${row['id']} with ${response.statusCode}. Stopping flush.");
           // If one fails, stop trying to preserve order and battery
           break; 
         }
       } catch (e) {
-        print("FLUSH: Network error ($e). Stopping.");
+        _logger.severe("FLUSH: Network error ($e). Stopping.");
         break;
       }
     }
@@ -80,7 +83,7 @@ class WavelogService {
         }
       }
     } catch (e) {
-      print("Error fetching stations: $e");
+      _logger.severe("Error fetching stations: $e");
     }
     return [];
   }
@@ -169,10 +172,10 @@ class WavelogService {
     
     adif.write("<EOR>"); 
 
-    print("------------------------------------------------");
-    print("DEBUG ADIF PAYLOAD:");
-    print(adif.toString());
-    print("------------------------------------------------");
+    _logger.fine("------------------------------------------------");
+    _logger.fine("DEBUG ADIF PAYLOAD:");
+    _logger.fine(adif.toString());
+    _logger.fine("------------------------------------------------");
 
     Map<String, dynamic> payload = {
       "key": apiKey,
@@ -181,11 +184,11 @@ class WavelogService {
       "string": adif.toString() 
     };
 
-    print("--- POST QSO DEBUG ---");
-    print("URL: $apiUri");
-    print("Station ID: $stationProfileId");
-    print("Payload: ${jsonEncode(payload)}");
-    print("----------------------");
+    _logger.fine("--- POST QSO DEBUG ---");
+    _logger.fine("URL: $apiUri");
+    _logger.fine("Station ID: $stationProfileId");
+    _logger.fine("Payload: ${jsonEncode(payload)}");
+    _logger.fine("----------------------");
 
     try {
       final response = await http.post(
@@ -194,13 +197,13 @@ class WavelogService {
         body: jsonEncode(payload),
       );
 
-      print("Response Code: ${response.statusCode}");
-      print("Response Body: ${response.body}");
+      _logger.fine("Response Code: ${response.statusCode}");
+      _logger.fine("Response Body: ${response.body}");
 
       return response.statusCode;
     } catch (e) {
       // NETWORK ERROR (No internet, timeout)
-      print("NETWORK ERROR: $e");
+      _logger.severe("NETWORK ERROR: $e");
       return 0;
     }
   }
@@ -238,7 +241,7 @@ class WavelogService {
         );
       }
     } catch (e) {
-      print("Lookup Error: $e");
+      _logger.severe("Lookup Error: $e");
     }
     return LookupResult();
   }

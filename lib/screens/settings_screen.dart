@@ -212,8 +212,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
               
               await DatabaseService().updateAllDatabases((status) {
-                // Ideally show this in a dialog, but print for now
-                print("DB STATUS: $status");
+                // Status updates are handled via SnackBar notifications
               });
 
               if (context.mounted) {
